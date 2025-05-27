@@ -4,6 +4,9 @@
 
 This script (`main.py`) is designed to analyze Akamai Property Manager configurations across multiple accounts. It detects configuration issues, missing behaviors, mismatches in certificates, improper slot settings, and generates per-account and merged summary reports in CSV or Excel format.
 
+This script is a enhancement of https://git.source.akamai.com/projects/PSJAPAN/repos/api-rosawa-bulk_config_test/browse
+and takes multiple configs as input
+
 ## Features
 
 - Analyze all active properties for selected Akamai accounts.
