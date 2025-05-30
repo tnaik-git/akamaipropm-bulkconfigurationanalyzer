@@ -1416,16 +1416,21 @@ if __name__ == "__main__":
         )
         server_cert = input("Real certificates are required? (y/n):").lower() == "y"
 
+          # Ask user if they want to create a combined report
+        combine = input("\nDo you also want to create a combined report for all accounts in CSV? (y/n): ").strip().lower()
+
         while True:
             n_account += 1
             print(f"\n------------ Account #{n_account} ------------")
 
             if ACCOUNTS:
-                account = ACCOUNTS.pop(0)
-            else:
-                account = input("\nAccount name:").strip()
+                account = ACCOUNTS.pop(0).strip()
                 if not account:
-                    break
+                    print("ℹ️  Skipping empty account name.")
+                    continue
+            else:
+                print("ℹ️  No more accounts in the CSV. Exiting loop.")
+                break
 
             if not file_xlsx:
                 file_xlsx = (
@@ -1531,44 +1536,32 @@ if __name__ == "__main__":
                     
                     if len(result):
                         df = pd.concat(result, ignore_index=True)
-                        csv_filename = f"output/{account}.csv".replace(" ", "_")
+                        csv_filename = os.path.join("output", f"{account.replace(' ', '_')}.csv")
                         df.to_csv(csv_filename, index=False)
-                        #print(f"✅ Saved CSV for {account}: {csv_filename}")
-            print(f"✅ Saved CSV for {account}: {csv_filename}")
+                        print(f"✅ Saved CSV for {account}: {csv_filename}")
+            
 
         # create a merged report
-        # Ask user if they want to create a combined report
-        combine = input("\nDo you want to create a combined report? (y/n): ").strip().lower()
         if combine == "y":
-            merge_csv = input("Enter path to CSV file listing account names to merge: ").strip()
-
-            selected_accounts = []
-            try:
-                with open(merge_csv, newline='', encoding='utf-8') as csvfile:
-                    reader = csv.reader(csvfile)
-                    for row in reader:
-                        if row and row[0].strip().lower() != "account":
-                            selected_accounts.append(row[0].strip().replace(" ", "_"))
-            except Exception as e:
-                print(f"❌ Error reading merge list: {e}")
-                selected_accounts = []
-
             merged_df = pd.DataFrame()
-            for account in selected_accounts:
-                file_path = os.path.join("output", f"{account}.csv")
-                if os.path.exists(file_path):
-                    df = pd.read_csv(file_path)
-                    df["source_account"] = account  # optional: tag source
-                    merged_df = pd.concat([merged_df, df], ignore_index=True)
-                else:
-                    print(f"⚠️  CSV not found for account: {account}")
+            for file_name in os.listdir("output"):
+                if file_name.lower().endswith(".csv"):
+                    file_path = os.path.join("output", file_name)
+                    try:
+                        df = pd.read_csv(file_path)
+                        account_name = os.path.splitext(file_name)[0]
+                        df["source_account"] = account_name
+                        merged_df = pd.concat([merged_df, df], ignore_index=True)
+                    except Exception as e:
+                        print(f"❌ Failed to read {file_name}: {e}")
 
             if not merged_df.empty:
-                output_file = os.path.join("merge_details", "merge_details.csv")
+                output_file = os.path.join("output", "merge_details.csv")
                 merged_df.to_csv(output_file, index=False)
                 print(f"\n✅ Combined report saved to: {output_file}")
             else:
-                print("❌ No matching files found. No combined report created.")
+                print("❌ No CSV files found in the output folder. No merged report created.")
+
 
 
     except Exception as e:
