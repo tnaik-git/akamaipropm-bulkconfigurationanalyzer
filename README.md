@@ -22,7 +22,7 @@ and takes multiple configs as input
 |---------------|-------------|
 | `main.py`     | Main execution script for analyzing Akamai property configurations. |
 | `mylib.py`    | Library of reusable functions to interact with Akamai APIs and parse configuration data. |
-| `accounts.csv`| Input CSV specifying the list of accounts to process (user provided). |
+| `accounts.txt`| Input txt specifying the list of accounts to process (user provided). |
 
 ## Prerequisites
 
@@ -56,7 +56,7 @@ tqdm==4.67.1
 
 1. **Prepare Account List**
 
-   Create a CSV file (e.g., `accounts.csv`) with a column:
+   Create a txt file (e.g., `accounts.txt`) with a one account in one line:
    ```
    account
    AccountOne
