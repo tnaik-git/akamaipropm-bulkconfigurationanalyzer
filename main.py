@@ -35,6 +35,8 @@ from openpyxl.styles.borders import Border, Side
 from tqdm import tqdm
 import shutil
 import os
+import logging
+import re
 
 from mylib import (
     extract_behaviors,
@@ -361,22 +363,21 @@ N_CHUNK = 5
 
 
 
-def load_accounts_from_csv(file_path):
-    import csv
+def load_accounts_from_txt(file_path):
     accounts = []
     try:
-        with open(file_path, newline='', encoding='utf-8') as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                if row and row[0].strip().lower() != "account":
-                    accounts.append(row[0].strip())
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line in file:
+                line = line.strip()
+                if line and line.lower() != "account":
+                    accounts.append(line)
     except Exception as e:
-        print(f"❌ Error reading accounts CSV: {e}")
+        print(f"❌ Error reading accounts TXT: {e}")
     return accounts
 
 # Prompt user for CSV file path
-csv_path = input("Enter path to account CSV file (e.g., accounts.csv): ").strip()
-ACCOUNTS = load_accounts_from_csv(csv_path)
+txt_path = input("Enter path to account txt file (e.g., accounts.txt): ").strip()
+ACCOUNTS = load_accounts_from_txt(txt_path)
 
 
 def chunked_list(lst, size):
@@ -1382,6 +1383,7 @@ def save_df_to_excel(df, file_xlsx, mode, sheet_name):
             pass
 
 
+
 if __name__ == "__main__":
     try:
         # Clean and create/recreate folders
@@ -1438,107 +1440,158 @@ if __name__ == "__main__":
                 )
 
             # SW key
+            #df = get_switch_keys(account)  
+            #data_dict = extract_row_of_dataframe(df, display_table=True)
+            #switch_key = data_dict.get("accountSwitchKey")
+            #account = re.sub(r'([\/:*?"<>|[\]]|_.+$)', "", data_dict.get("accountName"))
+            #sheet_name = account[:31]
+
+
+            # Step 1: Get account switch keys from the API
             df = get_switch_keys(account)
-            data_dict = extract_row_of_dataframe(df, display_table=True)
-            switch_key = data_dict.get("accountSwitchKey")
-            account = re.sub(r'([\/:*?"<>|[\]]|_.+$)', "", data_dict.get("accountName"))
-            sheet_name = account[:31]
 
-            # Properties
-            try:
-                df_group = list_groups(switch_key, parent_only=False)
-                groups = []
-                properties = []
+            # Step 2: Use full CSV value without modification (except stripping whitespace)
+            account_clean = account.strip()
 
-                print("\n[Groups]")
-                try:
-                    display(df_group)
-                except:
-                    print(df_group)
+            # Step 3: Define exact target matches (Direct & Indirect Customer)
+            possible_names = [
+                f"{account_clean}_Direct Customer",
+                f"{account_clean}_Indirect Customer"
+            ]
 
-                for i in tqdm(df_group.index):
-                    for contract_id in df_group.at[i, "contractIds"]:
-                        group_id = df_group.at[i, "groupId"]
-                        df = list_properties(
-                            switch_key,
-                            contract_id,
-                            group_id,
-                            network=PROPERTY_VER,
-                        )
-                        if (df is not None) and len(df):
-                            properties.append(df)
+            # Debugging
+            #print("\n🧪 Raw CSV value:", repr(account))
+            #print("🧪 Cleaned for match:", repr(account_clean))
+            #print("🎯 Matching against:")
+            #for name in possible_names:
+                #print(f"  - {repr(name)}")
 
-                properties = pd.concat(properties)
-                properties = sorted(set(properties["propertyName"]))
-            except:
-                print(f"No Property in {PROPERTY_VER}")
+            # Step 4: Print all returned names for comparison
+            #print("\n📋 Account names returned from API:")
+            #print(df["accountName"].to_string(index=False))
+
+            # Step 5: Perform strict match
+            matches = df[df["accountName"].isin(possible_names)]
+
+            # Step 6: Display match result
+            num_matches = len(matches)
+            if num_matches > 1:
+                print(f"\n🔁 Multiple exact matches found for: {account} ({num_matches})")
+                for j, row in matches.iterrows():
+                    print(f"  {j}: {row['accountName']} | Switch Key: {row['accountSwitchKey']}")
+            elif num_matches == 1:
+                row = matches.iloc[0]
+                print(f"\n✅ One matching account found: {row['accountName']} | Switch Key: {row['accountSwitchKey']}")
+            else:
+                print(f"\n❌ No exact match found for: {account}")
                 continue
 
-            print(
-                f"\n[Properties in {PROPERTY_VER} ({len(properties)})]\n{', '.join(properties)}"
-            )
+            # Step 7: Process matched accounts
+            for _, row in matches.iterrows():
+            #for _, row in df.iterrows(): #lets iterate through the switch keys
+                switch_key = row.get("accountSwitchKey")
+                account_name = row.get("accountName")
 
-            if (not check_all_property) and (len(properties) > 1):
-                temp_list = input(
-                    f"Property name(s) (If multiple properties, separate them by comma, e.g., {', '.join(properties[:2])}):"
-                ).strip()
-                if not temp_list:
+                # Clean up the account name for safe use in filenames/sheet names
+                account = re.sub(r'([\/:*?"<>|[\]]|_.+$)', "", account_name)
+                sheet_name = account[:31]
+
+                # Now you can call your processing logic here
+                print(f"Processing: {account} ({switch_key})")
+
+                # Properties
+                try:
+                    df_group = list_groups(switch_key, parent_only=False)
+                    groups = []
                     properties = []
-                else:
-                    temp_list = [
-                        p.strip().lower() for p in re.split(r"[,\s]+", temp_list)
-                    ]
-                    temp_list = [p for p in properties if p.lower() in temp_list]
-                    properties = temp_list
 
-            # Edge hostnames
-            df_edgehostnames = list_edgehostnames(
-                switch_key,
-            )
+                    print("\n[Groups]")
+                    try:
+                        display(df_group)
+                    except:
+                        print(df_group)
 
-            # Slots
-            df_enroll = get_cps_enrollment_id(switch_key)
+                    for i in tqdm(df_group.index):
+                        for contract_id in df_group.at[i, "contractIds"]:
+                            group_id = df_group.at[i, "groupId"]
+                            df = list_properties(
+                                switch_key,
+                                contract_id,
+                                group_id,
+                                network=PROPERTY_VER,
+                            )
+                            if (df is not None) and len(df):
+                                properties.append(df)
 
-            # Custom behaviors/overrides
-            df_custom_behaviors = list_custom_behaviors(switch_key)
-            df_custom_overrides = list_custom_overrides(switch_key)
+                    properties = pd.concat(properties)
+                    properties = sorted(set(properties["propertyName"]))
+                except:
+                    print(f"No Property in {PROPERTY_VER}")
+                    continue
 
-            result = []
-            all_comments = dict()
+                print(f"\n[Properties in {PROPERTY_VER} ({len(properties)})]\n{', '.join(properties)}")
 
-            print(f"\nProcessing (Total: {int(len(properties)/N_CHUNK)+1}it)")
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                for chunk in tqdm(chunked_list(properties, N_CHUNK)):
-                    futures = [
-                        executor.submit(
-                            property_analysis,
-                            switch_key,
-                            property_name,
-                            df_enroll,
-                            df_custom_behaviors=df_custom_behaviors,
-                            df_custom_overrides=df_custom_overrides,
-                            target_ver=PROPERTY_VER,
-                            traffic_report=traffic_report,
-                            server_cert=server_cert,
-                        )
-                        for property_name in chunk
-                    ]
-                    for future in concurrent.futures.as_completed(futures):
-                        df, comments = future.result()
-                        result.append(df)
-                        all_comments.update(comments)
+                if (not check_all_property) and (len(properties) > 1):
+                    temp_list = input(
+                        f"Property name(s) (If multiple properties, separate them by comma, e.g., {', '.join(properties[:2])}):"
+                    ).strip()
+                    if not temp_list:
+                        properties = []
+                    else:
+                        temp_list = [
+                            p.strip().lower() for p in re.split(r"[,\s]+", temp_list)
+                        ]
+                        temp_list = [p for p in properties if p.lower() in temp_list]
+                        properties = temp_list
 
-                    # Save as Excel file
-                    #if len(result):
-                    #    df = pd.concat(result, ignore_index=True)
-                    #    save_df_to_excel(df, file_xlsx, mode, sheet_name)
-                    #    mode = "a"
-                    
-                    if len(result):
-                        df = pd.concat(result, ignore_index=True)
-                        csv_filename = os.path.join("output", f"{account.replace(' ', '_')}.csv")
-                        df.to_csv(csv_filename, index=False)
-                        print(f"✅ Saved CSV for {account}: {csv_filename}")
+                # Edge hostnames
+                df_edgehostnames = list_edgehostnames(
+                    switch_key,
+                )
+
+                # Slots
+                df_enroll = get_cps_enrollment_id(switch_key)
+
+                # Custom behaviors/overrides
+                df_custom_behaviors = list_custom_behaviors(switch_key)
+                df_custom_overrides = list_custom_overrides(switch_key)
+
+                result = []
+                all_comments = dict()
+
+                print(f"\nProcessing (Total: {int(len(properties)/N_CHUNK)+1}it)")
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    for chunk in tqdm(chunked_list(properties, N_CHUNK)):
+                        futures = [
+                            executor.submit(
+                                property_analysis,
+                                switch_key,
+                                property_name,
+                                df_enroll,
+                                df_custom_behaviors=df_custom_behaviors,
+                                df_custom_overrides=df_custom_overrides,
+                                target_ver=PROPERTY_VER,
+                                traffic_report=traffic_report,
+                                server_cert=server_cert,
+                            )
+                            for property_name in chunk
+                        ]
+                        for future in concurrent.futures.as_completed(futures):
+                            df, comments = future.result()
+                            result.append(df)
+                            all_comments.update(comments)
+
+                        # Save as Excel file
+                        #if len(result):
+                        #    df = pd.concat(result, ignore_index=True)
+                        #    save_df_to_excel(df, file_xlsx, mode, sheet_name)
+                        #    mode = "a"
+                        
+                        if len(result):
+                            df = pd.concat(result, ignore_index=True)
+                            csv_filename = os.path.join("output", f"{account.replace(' ', '_')}.csv")
+                            df.to_csv(csv_filename, index=False)
+                            print(f"✅ Saved CSV for {account}: {csv_filename}")
             
 
         # create a merged report
