@@ -1581,27 +1581,31 @@ if __name__ == "__main__":
                             result.append(df)
                             all_comments.update(comments)
 
-                        # Save as Excel file
-                        #if len(result):
-                        #    df = pd.concat(result, ignore_index=True)
-                        #    save_df_to_excel(df, file_xlsx, mode, sheet_name)
-                        #    mode = "a"
-                        
+                        #Save as Excel file
                         if len(result):
                             df = pd.concat(result, ignore_index=True)
-                            csv_filename = os.path.join("output", f"{account.replace(' ', '_')}.csv")
-                            df.to_csv(csv_filename, index=False)
-                            print(f"✅ Saved CSV for {account}: {csv_filename}")
+                            #excel_filename = os.path.join("output", f"{account.replace(' ', '_')}.csv")
+                            #save_df_to_excel(df, file_xlsx, mode, sheet_name)
+                            #mode = "a"
+                            excel_filename = os.path.join("output", f"{account.replace(' ', '_')}.xlsx")
+                            save_df_to_excel(df, excel_filename, mode="w", sheet_name=account[:31])
+                            print(f"✅ Saved Excel for {account}: {excel_filename}")
+                        
+                        #if len(result):
+                            #df = pd.concat(result, ignore_index=True)
+                            #csv_filename = os.path.join("output", f"{account.replace(' ', '_')}.csv")
+                            #df.to_csv(csv_filename, index=False)
+                            #print(f"✅ Saved CSV for {account}: {csv_filename}")
             
 
-        # create a merged report
+        # create a merged Excel report
         if combine == "y":
             merged_df = pd.DataFrame()
             for file_name in os.listdir("output"):
-                if file_name.lower().endswith(".csv"):
+                if file_name.lower().endswith(".xlsx") and file_name != "merge_details.xlsx":
                     file_path = os.path.join("output", file_name)
                     try:
-                        df = pd.read_csv(file_path)
+                        df = pd.read_excel(file_path, sheet_name=0)
                         account_name = os.path.splitext(file_name)[0]
                         df["source_account"] = account_name
                         merged_df = pd.concat([merged_df, df], ignore_index=True)
@@ -1609,13 +1613,11 @@ if __name__ == "__main__":
                         print(f"❌ Failed to read {file_name}: {e}")
 
             if not merged_df.empty:
-                output_file = os.path.join("output", "merge_details.csv")
-                merged_df.to_csv(output_file, index=False)
-                print(f"\n✅ Combined report saved to: {output_file}")
+                output_file = os.path.join("output", "merge_details.xlsx")
+                save_df_to_excel(merged_df, output_file, mode="w", sheet_name="All_Accounts")
+                print(f"\n✅ Combined Excel report saved to: {output_file}")
             else:
-                print("❌ No CSV files found in the output folder. No merged report created.")
-
-
+                print("❌ No Excel files found in the output folder. No merged report created.")
 
     except Exception as e:
         print(f"\nError: {e}")
